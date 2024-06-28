@@ -145,3 +145,31 @@ int nes_key_state(int b)
     }
 }
 
+int nes_key_state2(int b)
+{
+    ALLEGRO_KEYBOARD_STATE state;
+    al_get_keyboard_state(&state);
+    switch (b)
+    {
+        case 0: // On / Off
+            return 1;
+        case 1: // A
+            return al_key_down(&state, ALLEGRO_KEY_PAD_1);
+        case 2: // B
+            return al_key_down(&state, ALLEGRO_KEY_PAD_2);
+        case 3: // SELECT
+            return al_key_down(&state, ALLEGRO_KEY_PAD_3);
+        case 4: // START
+            return al_key_down(&state, ALLEGRO_KEY_PAD_4);
+        case 5: // UP
+            return al_key_down(&state, ALLEGRO_KEY_UP);
+        case 6: // DOWN
+            return al_key_down(&state, ALLEGRO_KEY_DOWN);
+        case 7: // LEFT
+            return al_key_down(&state, ALLEGRO_KEY_LEFT);
+        case 8: // RIGHT
+            return al_key_down(&state, ALLEGRO_KEY_RIGHT);
+        default:
+            return 1;
+    }
+}
