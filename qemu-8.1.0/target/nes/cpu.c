@@ -30,14 +30,14 @@ static void nes_cpu_set_pc(CPUState *cs, vaddr value)
 {
     NESCPU *cpu = NES_CPU(cs);
 
-    cpu->env.R_PC = value / 2; /* internally PC points to words */
+    cpu->env.PC = value; /* internally PC points to words */
 }
 
 static vaddr nes_cpu_get_pc(CPUState *cs)
 {
     NESCPU *cpu = NES_CPU(cs);
 
-    return cpu->env.R_PC * 2;
+    return cpu->env.PC;
 }
 
 static bool nes_cpu_has_work(CPUState *cs)
@@ -52,7 +52,7 @@ static void nes_cpu_synchronize_from_tb(CPUState *cs,
     CPUNESState *env = &cpu->env;
 
     tcg_debug_assert(!(cs->tcg_cflags & CF_PCREL));
-    env->R_PC = tb->pc / 2;
+    env->PC = tb->pc;
 }
 
 static void nes_restore_state_to_opc(CPUState *cs,
@@ -62,7 +62,7 @@ static void nes_restore_state_to_opc(CPUState *cs,
     NESCPU *cpu = NES_CPU(cs);
     CPUNESState *env = &cpu->env;
 
-    env->R_PC = data[0];
+    env->PC = data[0];
 }
 
 static void nes_cpu_reset_hold(Object *obj)
@@ -76,11 +76,11 @@ static void nes_cpu_reset_hold(Object *obj)
         mcc->parent_phases.hold(obj);
     }
 
-    env->R_PC = 0x3000;
-    env->R_Z = 1;
-    env->R_P = 0;
-    env->R_N = 0;
-    memset(env->r, 0, sizeof(env->r));
+    // 栈顶
+    env->SP = env->A = env->X = env->Y = 0;
+
+    env->f_B = env->f_C = env->f_D = env->f_N = env->f_V = env->f_Z = 0;
+    env->f_I = env->f_U = 1;
 }
 
 static void nes_cpu_disas_set_info(CPUState *cpu, disassemble_info *info)
@@ -134,18 +134,22 @@ static void nes_cpu_dump_state(CPUState *cs, FILE *f, int flags)
 {
     NESCPU *cpu = NES_CPU(cs);
     CPUNESState *env = &cpu->env;
-    int i;
 
     qemu_fprintf(f, "\n");
-    qemu_fprintf(f, "R_PC:    %04x\n", env->R_PC);
-    qemu_fprintf(f, "R_P:      %04x\n", env->R_P);
-    qemu_fprintf(f, "R_Z:      %04x\n", env->R_Z);
-    qemu_fprintf(f, "R_N:      %04x\n", env->R_N);
+    qemu_fprintf(f, "PC:     %04x\n", env->PC);
+    qemu_fprintf(f, "SP:     %04x\n", env->SP);
+    qemu_fprintf(f, "A:      %04x\n", env->A);
+    qemu_fprintf(f, "X:      %04x\n", env->X);
+    qemu_fprintf(f, "Y:      %04x\n", env->Y);
+    qemu_fprintf(f, "f_C:    %04x\n", env->f_C); 
+    qemu_fprintf(f, "f_Z:    %04x\n", env->f_Z); 
+    qemu_fprintf(f, "f_D:    %04x\n", env->f_D); 
+    qemu_fprintf(f, "f_B:    %04x\n", env->f_B); 
+    qemu_fprintf(f, "f_I:    %04x\n", env->f_I); 
+    qemu_fprintf(f, "f_U:    %04x\n", env->f_U); 
+    qemu_fprintf(f, "f_N:    %04x\n", env->f_N); 
+    qemu_fprintf(f, "f_V:    %04x\n", env->f_V); 
     qemu_fprintf(f, "\n");
-    for (i = 0; i < ARRAY_SIZE(env->r); i++) {
-        qemu_fprintf(f, "R[%02d]:  %04x   ", i, env->r[i]);
-        qemu_fprintf(f, "\n");
-    }
 }
 
 #include "hw/core/sysemu-cpu-ops.h"
@@ -189,7 +193,7 @@ static void nes_cpu_class_init(ObjectClass *oc, void *data)
     cc->gdb_read_register = nes_cpu_gdb_read_register;
     cc->gdb_write_register = nes_cpu_gdb_write_register;
     cc->gdb_adjust_breakpoint = nes_cpu_gdb_adjust_breakpoint;
-    cc->gdb_num_core_regs = 35;
+    cc->gdb_num_core_regs = 6;
     cc->gdb_core_xml_file = "nes-cpu.xml";
     cc->tcg_ops = &nes_tcg_ops;
 }

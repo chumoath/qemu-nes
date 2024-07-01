@@ -28,12 +28,19 @@
 #define NUMBER_OF_CPU_REGISTERS 8
 
 typedef struct CPUArchState {
-    uint32_t R_PC;
-
-    uint32_t R_P;
-    uint32_t R_Z;
-    uint32_t R_N;
-    uint32_t r[NUMBER_OF_CPU_REGISTERS];
+    uint32_t PC;
+    uint32_t SP;
+    uint32_t A;
+    uint32_t X;
+    uint32_t Y;
+    uint32_t f_C;
+    uint32_t f_Z;
+    uint32_t f_D;
+    uint32_t f_B;
+    uint32_t f_I;
+    uint32_t f_U;
+    uint32_t f_N;
+    uint32_t f_V;
 } CPUNESState;
 
 struct ArchCPU {
@@ -43,22 +50,6 @@ struct ArchCPU {
 
     CPUNegativeOffsetState neg;
     CPUNESState env;
-};
-
-enum
-{
-    MR_KBSR = 0xFE00, /* keyboard status */
-    MR_KBDR = 0xFE02  /* keyboard data */
-};
-
-enum
-{
-    TRAP_GETC = 0x20,  /* get character from keyboard, not echoed onto the terminal */
-    TRAP_OUT = 0x21,   /* output a character */
-    TRAP_PUTS = 0x22,  /* output a word string */
-    TRAP_IN = 0x23,    /* get character from keyboard, echoed onto the terminal */
-    TRAP_PUTSP = 0x24, /* output a byte string */
-    TRAP_HALT = 0x25   /* halt the program */
 };
 
 extern const struct VMStateDescription vms_nes_cpu;
@@ -90,9 +81,8 @@ static inline void cpu_get_tb_cpu_state(CPUNESState *env, vaddr *pc,
 {
     uint32_t flags = 0;
 
-    *pc = env->R_PC * 2;
+    *pc = env->PC;
     *cs_base = 0;
-
     *pflags = flags;
 }
 

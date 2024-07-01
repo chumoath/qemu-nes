@@ -54,9 +54,7 @@ static void nes_class_init(ObjectClass *oc, void *data)
 
     dc->realize = nes_realize;
     amc->cpu_type = TYPE_NES_CPU;
-    #define MEMORY_MAX (1 << 17)
-    amc->sram_size = MEMORY_MAX;
-    #undef MEMORY_MAX
+    amc->sram_size = 0x10000;
 };
 
 static const TypeInfo nes_mcu_types[] = {

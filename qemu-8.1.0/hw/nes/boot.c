@@ -5,48 +5,81 @@
 #include "boot.h"
 #include "qemu/error-report.h"
 
-#define MEMORY_MAX (1 << 16)
-static uint16_t memory[MEMORY_MAX];  /* 65536 locations */
+typedef uint8_t byte;
+typedef uint16_t word;
+typedef uint32_t dword;
+typedef uint64_t qword;
 
-static uint16_t swap16(uint16_t x)
+typedef struct {
+    char signature[4];
+    byte prg_block_count;
+    byte chr_block_count;
+    word rom_type;
+    byte reserved[8];
+} ines_header;
+
+static ines_header fce_rom_header;
+static char rom[1048576];
+
+// FCE Lifecycle
+
+static void romread(char *rom, void *buf, int size)
 {
-    return (x << 8) | (x >> 8);
+    static int off = 0;
+    memcpy(buf, rom + off, size);
+    off += size;
 }
 
-static void read_image_file(FILE* file)
+static fce_load_rom(char *rom)
 {
-    /* the origin tells us where in memory to place the image */
-    uint16_t origin;
-    fread(&origin, sizeof(origin), 1, file);
-    origin = swap16(origin);
+    byte mmc_id;
+    int prg_size;
+    static byte buf[1048576];
 
-    /* we know the maximum file size so we only need one fread */
-    uint16_t max_read = MEMORY_MAX - origin;
-    uint16_t* p = memory + origin;
-    size_t read = fread(p, sizeof(uint16_t), max_read, file);
+    romread(rom, &fce_rom_header, sizeof(fce_rom_header));
 
-    /* swap to little endian */
-    while (read-- > 0)
-    {
-        *p = swap16(*p);
-        ++p;
+    if (memcmp(fce_rom_header.signature, "NES\x1A", 4)) {
+        return -1;
     }
-}
 
-static int read_image(const char* image_path)
-{
-    FILE* file = fopen(image_path, "rb");
-    if (!file) { return 0; };
-    read_image_file(file);
-    fclose(file);
-    return 1;
+    mmc_id = ((fce_rom_header.rom_type & 0xF0) >> 4);
+    prg_size = fce_rom_header.prg_block_count * 0x4000;
+
+    romread(rom, buf, prg_size);
+
+    if (mmc_id == 0 || mmc_id == 3) {
+        // if there is only one PRG block, we must repeat it twice
+        if (fce_rom_header.prg_block_count == 1) {
+            address_space_write(&address_space_memory, 0x8000, MEMTXATTRS_UNSPECIFIED, buf, 0x4000);
+            address_space_write(&address_space_memory, 0xC000, MEMTXATTRS_UNSPECIFIED, buf, 0x4000);
+        }
+        else {
+            address_space_write(&address_space_memory, 0x8000, MEMTXATTRS_UNSPECIFIED, buf, 0x8000);
+        }
+    }
+    else {
+        return -1;
+    }
+
+    // Copying CHR pages into MMC and PPU
+    for (int i = 0; i < fce_rom_header.chr_block_count; i++) {
+        romread(rom, buf, 0x2000);
+        // mmc_id 不是 3，没有用到
+        // mmc_append_chr_rom_page(buf);
+
+        if (i == 0) {
+            // ppu_copy(0x0000, buf, 0x2000);
+        }
+    }
+
+    return 0;
 }
 
 bool nes_load_firmware(NESCPU *cpu, MachineState *ms, MemoryRegion *program_mr, const char *firmware)
 {
     g_autofree char *filename = NULL;
-    int read_ret;
-    uint16_t val;
+    FILE *fp;
+    int nread;
 
     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, firmware);
     if (filename == NULL) {
@@ -54,15 +87,24 @@ bool nes_load_firmware(NESCPU *cpu, MachineState *ms, MemoryRegion *program_mr, 
         return false;
     }
 
-    read_ret = read_image(filename);
-    if (read_ret != 1) {
-        error_report("Unable to read %s", filename);
+    fp = fopen(filename, "r");
+    if (fp == NULL)
+    {
+        error_report("Open rom file failed.");
         return false;
     }
 
-    address_space_write(&address_space_memory, 0x6000, MEMTXATTRS_UNSPECIFIED, (uint8_t *)memory + 0x6000, MEMORY_MAX * 2 - 0x6000);
-    address_space_read(&address_space_memory, 0x6000, MEMTXATTRS_UNSPECIFIED, &val, 2);
+    nread = fread(rom, sizeof(rom), 1, fp);
+    if (nread == 0 && ferror(fp)) {
+        error_report("Read rom file failed.");
+        return false;
+    }
+
+    if (fce_load_rom(rom) != 0)
+    {
+        error_report("Invalid or unsupported rom.");
+        return false;
+    }
+
     return true;
 }
-
-#undef MEMORY_MAX
