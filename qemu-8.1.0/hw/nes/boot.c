@@ -4,6 +4,7 @@
 #include "elf.h"
 #include "boot.h"
 #include "qemu/error-report.h"
+#include "sysemu/reset.h"
 
 typedef uint8_t byte;
 typedef uint16_t word;
@@ -21,6 +22,17 @@ typedef struct {
 static ines_header fce_rom_header;
 static char rom[1048576];
 
+static void do_cpu_reset(void *opaque)
+{
+    NESCPU *cpu = opaque;
+    CPUNESState *env = &cpu->env;
+    uint16_t pc;
+    address_space_read(&address_space_memory, 0xFFFC, MEMTXATTRS_UNSPECIFIED, &pc, 2);
+    env->SP = (env->SP - 3) & 0xFF;
+    env->PC = pc & 0xFFFF;
+    env->f_I = 1;
+}
+
 // FCE Lifecycle
 
 static void romread(char *rom, void *buf, int size)
@@ -30,7 +42,7 @@ static void romread(char *rom, void *buf, int size)
     off += size;
 }
 
-static fce_load_rom(char *rom)
+static int fce_load_rom(char *rom)
 {
     byte mmc_id;
     int prg_size;
@@ -105,6 +117,8 @@ bool nes_load_firmware(NESCPU *cpu, MachineState *ms, MemoryRegion *program_mr, 
         error_report("Invalid or unsupported rom.");
         return false;
     }
+
+    qemu_register_reset(do_cpu_reset, cpu);
 
     return true;
 }
