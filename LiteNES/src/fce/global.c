@@ -16,6 +16,7 @@ void (*cpu_op_address_mode[256])();       // Array of address modes
 void (*cpu_op_handler[256])();            // Array of instruction function pointers
 bool cpu_op_in_base_instruction_set[256]; // true if instruction is in base 6502 instruction set
 char *cpu_op_name[256];                   // Instruction names
+char *cpu_address_mode_name[256];         // Instruction address mode names
 int cpu_op_cycles[256];                   // CPU cycles used by instructions
 
 

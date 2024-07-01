@@ -2,6 +2,7 @@
 #include "cpu-internal.h"
 #include "memory.h"
 #include "ppu.h"
+#include <stdarg.h>
 
 
 // CPU Memory
@@ -272,7 +273,8 @@ void cpu_op_rra() { cpu_op_ror(); cpu_op_adc(); }
                                   cpu_op_handler[0x##o] = cpu_op_##f; \
                                   cpu_op_name[0x##o] = n; \
                                   cpu_op_address_mode[0x##o] = cpu_address_##a; \
-                                  cpu_op_in_base_instruction_set[0x##o] = true;
+                                  cpu_op_in_base_instruction_set[0x##o] = true; \
+                                  cpu_address_mode_name[0x##o] = #a;
 
 // Not implemented instructions
 
@@ -280,7 +282,8 @@ void cpu_op_rra() { cpu_op_ror(); cpu_op_adc(); }
                          cpu_op_handler[0x##o] = ____FE____; \
                          cpu_op_name[0x##o] = "NOP"; \
                          cpu_op_address_mode[0x##o] = cpu_address_##a; \
-                         cpu_op_in_base_instruction_set[0x##o] = false;
+                         cpu_op_in_base_instruction_set[0x##o] = false; \
+                         cpu_address_mode_name[0x##o] = #a;
 
 // Extended instruction set found in other CPUs and implemented for compatibility
 
@@ -288,7 +291,8 @@ void cpu_op_rra() { cpu_op_ror(); cpu_op_adc(); }
                                   cpu_op_handler[0x##o] = cpu_op_##f; \
                                   cpu_op_name[0x##o] = n; \
                                   cpu_op_address_mode[0x##o] = cpu_address_##a; \
-                                  cpu_op_in_base_instruction_set[0x##o] = false;
+                                  cpu_op_in_base_instruction_set[0x##o] = false; \
+                                  cpu_address_mode_name[0x##o] = #a;
 
 
 
@@ -558,16 +562,61 @@ inline unsigned long long cpu_clock()
     return cpu_cycles;
 }
 
+#define NES_LOG
+
+#ifdef NES_LOG
+static void nes_log(const char *log_file_name, const char *fmt, ...)
+{
+    char log_file_path[64], mode[2] = "a";
+    sprintf (log_file_path, "%s", log_file_name);
+
+    #if 0
+    struct stat st = {};
+    stat (log_file_path, &st);
+    if (st.st_size > 200 * 1024) {
+        mode[0] = 'w';
+    }
+    #endif
+
+    FILE *fp = NULL;
+    fp = fopen (log_file_path, mode);
+    
+    va_list args;
+    va_start (args, fmt);
+    vfprintf (fp, fmt, args);
+    fflush(fp);
+    va_end (args);
+    fclose (fp);
+}
+
+void helper_print_regs(const void *fmt)
+{
+    nes_log("debug.txt", (const char *)fmt);
+    nes_log("debug.txt", "    PC: 0x%x SP: 0x%x A: 0x%x X: 0x%x Y: 0x%x P: 0x%x\n", cpu.PC, cpu.SP, cpu.A, cpu.X, cpu.Y, cpu.P);
+    nes_log("debug.txt", "\n\n");
+}
+#else
+void helper_print_regs(const void *fmt, uint32_t npc)
+{
+}
+#endif
+
+
 void cpu_run(long cycles)
 {
     while (cycles > 0) {
         op_code = memory_readb(cpu.PC++);
+
         if (cpu_op_address_mode[op_code] == NULL) {
         }
         else {
             cpu_op_address_mode[op_code]();
             cpu_op_handler[op_code]();
         }
+
+        char buf[256];
+        sprintf (buf, "%s: addr_mode=%s\n", cpu_op_name[op_code], cpu_address_mode_name[op_code]);
+        helper_print_regs(buf);
         cycles -= cpu_op_cycles[op_code] + op_cycles;
         cpu_cycles -= cpu_op_cycles[op_code] + op_cycles;
         op_cycles = 0;
